@@ -22,6 +22,16 @@ $PresetModels = @(
   'phi4-mini'
 )
 
+function Pause-Exit {
+  param([int]$Code = 0)
+  if ($env:MICROWAVE_NODE_NO_PAUSE) { exit $Code }
+  Write-Host ''
+  try {
+    Read-Host 'Press Enter to close this window'
+  } catch { Start-Sleep -Seconds 30 }
+  exit $Code
+}
+
 function Write-Banner {
   Write-Host ''
   Write-Host '  +------------------------------------------+'
@@ -40,6 +50,30 @@ function Get-CmdPath {
     if ($g.Definition) { return [string]$g.Definition }
   } catch { }
   return $null
+}
+
+# Node installers often add PATH only for new terminals; add common locations for this session.
+function Ensure-NodeOnPath {
+  if ((Get-CmdPath 'node') -and (Get-CmdPath 'npm')) { return $true }
+  $candidates = @(
+    (Join-Path $env:ProgramFiles 'nodejs'),
+    (Join-Path $env:LOCALAPPDATA 'Programs\nodejs')
+  )
+  $pf86 = ${env:ProgramFiles(x86)}
+  if ($pf86) {
+    $candidates += (Join-Path $pf86 'nodejs')
+  }
+  foreach ($dir in $candidates) {
+    if (-not $dir) { continue }
+    $nodeExe = Join-Path $dir 'node.exe'
+    if (Test-Path -LiteralPath $nodeExe) {
+      if ($env:Path -notlike "*$dir*") {
+        $env:Path = "$dir;$env:Path"
+      }
+      return $true
+    }
+  }
+  return $false
 }
 
 function Invoke-DownloadFile {
@@ -62,12 +96,12 @@ function Test-OllamaAvailable {
   return $null -ne (Get-CmdPath 'ollama')
 }
 
-function Run-Ollama {
-  param([string[]]$Args)
+function Invoke-OllamaProcess {
+  param([string[]]$OllamaArguments)
   $exe = Get-CmdPath 'ollama'
   if (-not $exe) { return 1 }
   try {
-    $p = Start-Process -FilePath $exe -ArgumentList $Args -Wait -PassThru -NoNewWindow
+    $p = Start-Process -FilePath $exe -ArgumentList $OllamaArguments -Wait -PassThru -NoNewWindow
     if ($p -and $null -ne $p.ExitCode) { return [int]$p.ExitCode }
   } catch {
     Write-Host "  (ollama: $($_.Exception.Message))" -ForegroundColor Yellow
@@ -75,11 +109,27 @@ function Run-Ollama {
   return 1
 }
 
+function Refresh-PathEnv {
+  try {
+    $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    $user = [Environment]::GetEnvironmentVariable('Path', 'User')
+    if ($machine -and $user) {
+      $env:Path = "$machine;$user"
+    } elseif ($machine) { $env:Path = $machine }
+    elseif ($user) { $env:Path = $user }
+  } catch { }
+}
+
 Write-Banner
 
+$null = Ensure-NodeOnPath
+
 if (-not (Get-CmdPath 'node') -or -not (Get-CmdPath 'npm')) {
-  Write-Host 'Install Node.js 18+ from https://nodejs.org/ (includes npm), then run this again.' -ForegroundColor Red
-  exit 1
+  Write-Host 'Node.js was not found on PATH.' -ForegroundColor Red
+  Write-Host 'Install the LTS build from https://nodejs.org/ then:' -ForegroundColor Yellow
+  Write-Host '  - Close this window, open a NEW PowerShell or Terminal, and run this script again, OR' -ForegroundColor Yellow
+  Write-Host '  - Log out and back in so PATH updates.' -ForegroundColor Yellow
+  Pause-Exit 1
 }
 
 try {
@@ -97,7 +147,7 @@ try {
   }
 } catch {
   Write-Host "Could not resolve install folder: $($_.Exception.Message)" -ForegroundColor Red
-  exit 1
+  Pause-Exit 1
 }
 
 Set-Location -LiteralPath $Root
@@ -106,7 +156,7 @@ Write-Host "-> install dir: $Root"
 if (-not (Test-Path -LiteralPath 'microwave-node.js')) {
   Write-Host '-> download microwave-node.js'
   if (-not (Invoke-DownloadFile -Uri "$RepoRaw/microwave-node.js" -OutFile 'microwave-node.js')) {
-    exit 1
+    Pause-Exit 1
   }
 }
 
@@ -132,18 +182,20 @@ if (-not (Test-Path -LiteralPath 'package.json')) {
 }
 
 Write-Host '-> npm install'
-if (-not (Get-CmdPath 'npm')) { exit 1 }
+if (-not (Get-CmdPath 'npm')) {
+  Write-Host 'npm not found even after PATH fix.' -ForegroundColor Red
+  Pause-Exit 1
+}
 try {
-  # npm on Windows is usually a .cmd shim; cmd /c avoids PowerShell native-command quirks.
   $npmProc = Start-Process -FilePath 'cmd.exe' -ArgumentList @('/c', 'npm', 'install') -WorkingDirectory $Root -Wait -PassThru -NoNewWindow
   if (-not $npmProc -or $npmProc.ExitCode -ne 0) {
     $c = if ($npmProc) { $npmProc.ExitCode } else { -1 }
     Write-Host "npm install exited with code $c" -ForegroundColor Red
-    exit $c
+    Pause-Exit $c
   }
 } catch {
   Write-Host "npm install failed: $($_.Exception.Message)" -ForegroundColor Red
-  exit 1
+  Pause-Exit 1
 }
 
 if (-not (Test-Path -LiteralPath '.env')) {
@@ -160,17 +212,6 @@ OLLAMA_KEEP_ALIVE=30m
 '@ | Set-Content -LiteralPath '.env' -Encoding ascii
     Write-Host '-> created .env (defaults)'
   }
-}
-
-function Refresh-PathEnv {
-  try {
-    $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
-    $user = [Environment]::GetEnvironmentVariable('Path', 'User')
-    if ($machine -and $user) {
-      $env:Path = "$machine;$user"
-    } elseif ($machine) { $env:Path = $machine }
-    elseif ($user) { $env:Path = $user }
-  } catch { }
 }
 
 Write-Host ''
@@ -251,7 +292,7 @@ if (Test-OllamaAvailable) {
 
   foreach ($m in $toPull) {
     Write-Host "-> ollama pull $m"
-    $code = Run-Ollama -Args @('pull', $m)
+    $code = Invoke-OllamaProcess -OllamaArguments @('pull', $m)
     if ($code -ne 0) {
       Write-Host "  (pull failed or incomplete: $m)" -ForegroundColor Yellow
     }
@@ -265,3 +306,5 @@ Write-Host '  +------------------------------------------+'
 Write-Host '  In this folder: edit .env, then:'
 Write-Host '    npm run register -- --main https://SERVER --url https://YOU:PORT --name gpu --token SECRET --models gemma3:4b'
 Write-Host '    npm start'
+Write-Host ''
+Pause-Exit 0
