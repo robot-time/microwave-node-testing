@@ -2,7 +2,7 @@
 
 One JavaScript file (`microwave-node.js`) + `setup.sh`: relay local **Ollama** to a main Microwave server.
 
-**This repo should contain:** `microwave-node.js`, `setup.sh`, `package.json`, `package-lock.json`, `.env.example`, `.gitignore`, and this `README.md`.  
+**This repo should contain:** `microwave-node.js`, `setup.sh`, `setup.ps1` (Windows), `package.json`, `package-lock.json`, `.env.example`, `.gitignore`, and this `README.md`.  
 If GitHub only shows a README, the code was never pushed — run **Push the full repo** below on your machine.
 
 ---
@@ -15,7 +15,7 @@ From the folder that has `microwave-node.js` (your local `node-agent` copy):
 cd /path/to/your/node-agent
 
 git pull origin main --rebase   # if GitHub already has a commit (e.g. README only)
-git add microwave-node.js setup.sh package.json package-lock.json README.md .env.example .gitignore
+git add microwave-node.js setup.sh setup.ps1 package.json package-lock.json README.md .env.example .gitignore
 git status   # should NOT list .env or node_modules
 git commit -m "Add microwave-node agent code and setup"
 git push origin main
@@ -34,7 +34,7 @@ If `git pull` reports a conflict in `README.md`, open it, keep the sections you 
 ```bash
 cd /path/to/node-agent
 git init
-git add microwave-node.js setup.sh package.json package-lock.json README.md .env.example .gitignore
+git add microwave-node.js setup.sh setup.ps1 package.json package-lock.json README.md .env.example .gitignore
 git commit -m "Initial microwave node agent"
 git branch -M main
 git remote add origin https://github.com/robot-time/microwave-node-testing.git
@@ -47,9 +47,9 @@ git push -u origin main
 
 ## Setup (pick one)
 
-### No Git — `curl` + `bash` only
+### macOS / Linux — no Git (`curl` + `bash`)
 
-Needs **Node.js 18+**, **npm**, **bash**, and **curl** (macOS/Linux: built-in; Windows: use **Git Bash**, **WSL**, or install those tools).
+Needs **Node.js 18+**, **npm**, **bash**, and **curl**.
 
 From any directory, one line:
 
@@ -68,19 +68,42 @@ That downloads `microwave-node.js`, creates `./microwave-node/` under your **cur
   and [setup.sh (raw)](https://raw.githubusercontent.com/robot-time/microwave-node-testing/main/setup.sh)  
   in a browser → Save As → put both in the same folder → `chmod +x setup.sh` → `./setup.sh` (with `MICROWAVE_NODE_REPO_RAW` **unset** so it does not re-download).
 
+### Windows — no Git (PowerShell)
+
+Install **[Node.js LTS](https://nodejs.org/)** (includes **npm**). Then open **PowerShell** (not required to install Git).
+
+**One-liner** (installs into `.\microwave-node` under your current folder):
+
+```powershell
+$env:MICROWAVE_NODE_REPO_RAW = 'https://raw.githubusercontent.com/robot-time/microwave-node-testing/main'
+irm "$($env:MICROWAVE_NODE_REPO_RAW)/setup.ps1" | iex
+```
+
+(`irm` = `Invoke-WebRequest`, `iex` = `Invoke-Expression`.)
+
+- **Custom folder:** first set `$env:MICROWAVE_NODE_DIR = 'C:\path\to\microwave-node'`, then run the two lines above.
+- **Execution policy** errors: run once (current user only):  
+  `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+- **Manual download:** save [microwave-node.js](https://raw.githubusercontent.com/robot-time/microwave-node-testing/main/microwave-node.js) and [setup.ps1](https://raw.githubusercontent.com/robot-time/microwave-node-testing/main/setup.ps1) into the same folder → in that folder run `.\setup.ps1` with **`MICROWAVE_NODE_REPO_RAW` unset** (so it does not re-download).
+- **WSL** or **Git Bash** on Windows: you can use the **macOS/Linux** `curl | bash` method instead.
+
+After setup, use **Command Prompt**, **PowerShell**, or **Git Bash** in that folder — `npm run register` and `npm start` work the same.
+
 ### With Git
 
 ```bash
 git clone https://github.com/robot-time/microwave-node-testing.git && cd microwave-node-testing && chmod +x setup.sh && ./setup.sh
 ```
 
-(`npm run setup` runs `./setup.sh` the same way.)
+On **Windows** (clone in PowerShell): `cd microwave-node-testing` then `.\setup.ps1` (or use Git Bash and `./setup.sh`).
+
+(`npm run setup` runs `./setup.sh`; on Windows without bash, use `.\setup.ps1` instead.)
 
 Raw base (for scripts): `https://raw.githubusercontent.com/robot-time/microwave-node-testing/main`
 
 ## After setup
 
-If you used **curl** into the default path: `cd microwave-node` (or your `MICROWAVE_NODE_DIR`) before the steps below.
+If you used **curl** / **PowerShell remote setup** into the default path: `cd microwave-node` (or your `MICROWAVE_NODE_DIR`) before the steps below.
 
 1. Edit **`.env`** — `NODE_DEVICE_TOKEN` from the admin.
 2. Register once:
