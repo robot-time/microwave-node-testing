@@ -2,11 +2,34 @@
 
 One JavaScript file (`microwave-node.js`) + `setup.sh`: relay local **Ollama** to a main Microwave server.
 
-## Publishing to GitHub (you)
+**This repo should contain:** `microwave-node.js`, `setup.sh`, `package.json`, `package-lock.json`, `.env.example`, `.gitignore`, and this `README.md`.  
+If GitHub only shows a README, the code was never pushed — run **Push the full repo** below on your machine.
 
-1. On [github.com/new](https://github.com/new), create a repository (e.g. `microwave-node`). **Do not** add a README if you will push an existing folder (avoids merge noise).
+---
 
-2. On your machine, from the folder that should become the repo root (the `node-agent` directory, or a copy of it):
+## Push the full repo (maintainer)
+
+From the folder that has `microwave-node.js` (your local `node-agent` copy):
+
+```bash
+cd "/Users/mileshedrick/Microwave tests/node-agent"   # or your path
+
+git pull origin main --rebase   # if GitHub already has a commit (e.g. README only)
+git add microwave-node.js setup.sh package.json package-lock.json README.md .env.example .gitignore
+git status   # should NOT list .env or node_modules
+git commit -m "Add microwave-node agent code and setup"
+git push origin main
+```
+
+If `git pull` reports a conflict in `README.md`, open it, keep the sections you want, then `git add README.md && git rebase --continue`.
+
+---
+
+## Publishing to GitHub (new repo, for reference)
+
+1. On [github.com/new](https://github.com/new), create a repository. Skip the “add README” option if you will push an existing folder.
+
+2. First push:
 
 ```bash
 cd /path/to/node-agent
@@ -14,39 +37,30 @@ git init
 git add microwave-node.js setup.sh package.json package-lock.json README.md .env.example .gitignore
 git commit -m "Initial microwave node agent"
 git branch -M main
-git remote add origin https://github.com/YOU/microwave-node.git
+git remote add origin https://github.com/robot-time/microwave-node-testing.git
 git push -u origin main
 ```
 
-3. **Never commit** `.env` or `data/` (they are in `.gitignore`). Contributors create `.env` via `./setup.sh`.
-
-4. Tell contributors your **raw base URL** (replace `YOU`, `microwave-node`, and `main` if your default branch differs):
-
-`https://raw.githubusercontent.com/YOU/microwave-node/main`
-
-5. In this README, search/replace placeholder `YOU/microwave-node` with your real `user/repo` so clone and curl examples work.
+3. **Never commit** `.env` or `data/` (they are in `.gitignore`).
 
 ---
 
 ## Fastest: clone and setup
 
 ```bash
-git clone https://github.com/YOU/microwave-node.git && cd microwave-node && chmod +x setup.sh && ./setup.sh
+git clone https://github.com/robot-time/microwave-node-testing.git && cd microwave-node-testing && chmod +x setup.sh && ./setup.sh
 ```
 
 (`npm run setup` runs the same script.)
 
-## Or: download only `setup.sh` + curl the agent file
-
-1. Put `setup.sh` on GitHub (this repo).
-2. Anyone can run (replace `YOU/REPO` and branch):
+## Or: curl `setup.sh` only (downloads `microwave-node.js`)
 
 ```bash
-export MICROWAVE_NODE_REPO_RAW='https://raw.githubusercontent.com/YOU/REPO/main'
+export MICROWAVE_NODE_REPO_RAW='https://raw.githubusercontent.com/robot-time/microwave-node-testing/main'
 curl -fsSL "$MICROWAVE_NODE_REPO_RAW/setup.sh" | bash
 ```
 
-That downloads `microwave-node.js`, writes `package.json`, runs `npm install`, creates `.env`.
+Raw base (for reference): `https://raw.githubusercontent.com/robot-time/microwave-node-testing/main`
 
 ## After setup
 
@@ -64,7 +78,7 @@ npm run register -- \
 
 3. Run: **`npm start`**
 
-## Commands (same as `npm run …`)
+## Commands
 
 | Command | Purpose |
 |--------|---------|
@@ -84,4 +98,3 @@ npm run register -- \
 - `GET /api/node/health` (optional `x-node-token`)
 - `POST /api/node/run` — `{ modelId, messages }`
 - `POST /api/node/stream` — SSE tokens
-# microwave-node-testing
