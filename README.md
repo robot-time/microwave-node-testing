@@ -12,7 +12,7 @@ If GitHub only shows a README, the code was never pushed — run **Push the full
 From the folder that has `microwave-node.js` (your local `node-agent` copy):
 
 ```bash
-cd "/Users/mileshedrick/Microwave tests/node-agent"   # or your path
+cd /path/to/your/node-agent
 
 git pull origin main --rebase   # if GitHub already has a commit (e.g. README only)
 git add microwave-node.js setup.sh package.json package-lock.json README.md .env.example .gitignore
