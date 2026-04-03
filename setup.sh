@@ -20,7 +20,10 @@ fi
 cd "${ROOT}"
 echo "→ install dir: ${ROOT}"
 
-REPO_RAW="${MICROWAVE_NODE_REPO_RAW:-}"
+# Default upstream (one-liner curl | bash needs no env). Override: MICROWAVE_NODE_REPO_RAW=...
+DEFAULT_REPO_RAW='https://raw.githubusercontent.com/robot-time/microwave-node-testing/main'
+REPO_RAW="${MICROWAVE_NODE_REPO_RAW:-$DEFAULT_REPO_RAW}"
+REPO_RAW="${REPO_RAW%/}"
 
 if [[ ! -f microwave-node.js ]] && [[ -n "$REPO_RAW" ]]; then
   echo "→ curl microwave-node.js"

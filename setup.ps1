@@ -9,7 +9,11 @@
 
 $ErrorActionPreference = 'Stop'
 
+# Default upstream (one-liner irm|iex needs no env). Override: $env:MICROWAVE_NODE_REPO_RAW
 $RepoRaw = if ($env:MICROWAVE_NODE_REPO_RAW) { $env:MICROWAVE_NODE_REPO_RAW.TrimEnd('/') } else { '' }
+if (-not $RepoRaw) {
+  $RepoRaw = 'https://raw.githubusercontent.com/robot-time/microwave-node-testing/main'
+}
 
 if ($env:MICROWAVE_NODE_DIR) {
   $null = New-Item -ItemType Directory -Force -Path $env:MICROWAVE_NODE_DIR
