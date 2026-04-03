@@ -1,18 +1,35 @@
-# Microwave node agent — Windows setup (same idea as setup.sh).
+# Microwave node agent — installs agent + optional Ollama + model pulls.
 # Requires: Node.js 18+ (npm on PATH), PowerShell 5.1+.
-#
-# Remote one-liner (downloads into .\microwave-node under current directory):
-#   $env:MICROWAVE_NODE_REPO_RAW='https://raw.githubusercontent.com/robot-time/microwave-node-testing/main'
-#   irm "$($env:MICROWAVE_NODE_REPO_RAW)/setup.ps1" | iex
-#
-# From a clone:  .\setup.ps1
 
 $ErrorActionPreference = 'Stop'
 
-# Default upstream (one-liner irm|iex needs no env). Override: $env:MICROWAVE_NODE_REPO_RAW
 $RepoRaw = if ($env:MICROWAVE_NODE_REPO_RAW) { $env:MICROWAVE_NODE_REPO_RAW.TrimEnd('/') } else { '' }
 if (-not $RepoRaw) {
   $RepoRaw = 'https://raw.githubusercontent.com/robot-time/microwave-node-testing/main'
+}
+
+$PresetModels = @(
+  'gemma3:4b',
+  'phi3:mini',
+  'llama3.2:3b',
+  'llama3.1:8b',
+  'qwen2.5:7b',
+  'phi4-mini'
+)
+
+function Write-Banner {
+  Write-Host ''
+  Write-Host '  ╔════════════════════════════════════════╗'
+  Write-Host '  ║   Microwave — node agent setup         ║'
+  Write-Host '  ╚════════════════════════════════════════╝'
+  Write-Host ''
+}
+
+Write-Banner
+
+if (-not (Get-Command node -ErrorAction SilentlyContinue) -or -not (Get-Command npm -ErrorAction SilentlyContinue)) {
+  Write-Host 'Install Node.js 18+ from https://nodejs.org/ (includes npm), then run this again.' -ForegroundColor Red
+  exit 1
 }
 
 if ($env:MICROWAVE_NODE_DIR) {
@@ -30,16 +47,8 @@ Set-Location $Root
 Write-Host "-> install dir: $Root"
 
 if (-not (Test-Path -LiteralPath 'microwave-node.js')) {
-  if (-not $RepoRaw) {
-    Write-Error @"
-Missing microwave-node.js. Either:
-  Set `$env:MICROWAVE_NODE_REPO_RAW to the GitHub raw base, then re-run, or
-  Save microwave-node.js into this folder from the repo (raw file), then re-run.
-"@
-  }
   Write-Host '-> download microwave-node.js'
-  $uri = "$RepoRaw/microwave-node.js"
-  Invoke-WebRequest -Uri $uri -OutFile 'microwave-node.js' -UseBasicParsing
+  Invoke-WebRequest -Uri "$RepoRaw/microwave-node.js" -OutFile 'microwave-node.js' -UseBasicParsing
 }
 
 if (-not (Test-Path -LiteralPath 'package.json')) {
@@ -81,11 +90,100 @@ OLLAMA_KEEP_ALIVE=30m
 '@ | Set-Content -Path '.env' -Encoding ascii
     Write-Host '-> created .env (defaults)'
   }
-  Write-Host '  Edit .env — set NODE_DEVICE_TOKEN from the server admin.'
+}
+
+function Refresh-PathEnv {
+  $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+  $user = [Environment]::GetEnvironmentVariable('Path', 'User')
+  if ($machine -or $user) {
+    $env:Path = "$machine;$user" -replace ';+', ';'
+  }
+}
+
+function Test-OllamaCmd {
+  return [bool](Get-Command ollama -ErrorAction SilentlyContinue)
 }
 
 Write-Host ''
-Write-Host 'Done.'
-Write-Host '  1. Edit .env'
-Write-Host '  2. npm run register -- --main https://SERVER --url https://YOU:3847 --name my-gpu --token SECRET --models gemma3:4b'
-Write-Host '  3. npm start'
+if (Test-OllamaCmd) {
+  try {
+    $ver = & ollama --version 2>$null
+    Write-Host "-> Ollama on PATH: $ver"
+  } catch {
+    Write-Host '-> Ollama on PATH'
+  }
+} else {
+  Write-Host 'Ollama not found on PATH.'
+  $yn = Read-Host 'Install Ollama with winget (Ollama.Ollama)? [y/N]'
+  if ($yn -match '^[Yy]') {
+    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    if (-not $winget) {
+      Write-Host 'winget not available. Install Ollama from https://ollama.com/download then re-run this script.' -ForegroundColor Yellow
+    } else {
+      & winget install -e --id Ollama.Ollama --accept-package-agreements --accept-source-agreements
+      Refresh-PathEnv
+    }
+  }
+  if (-not (Test-OllamaCmd)) {
+    Write-Host '-> Ollama still not on PATH — install from https://ollama.com/download , reopen PowerShell, re-run to pull models.' -ForegroundColor Yellow
+  } else {
+    Write-Host "-> Ollama ready: $(& ollama --version 2>$null)"
+  }
+}
+
+if (Test-OllamaCmd) {
+  Write-Host ''
+  Write-Host 'Which models should Ollama download? (large files — pick what you need)'
+  $i = 1
+  foreach ($m in $PresetModels) {
+    Write-Host "  $i) $m"
+    $i++
+  }
+  Write-Host '  a) All of the above'
+  Write-Host '  c) Enter a custom Ollama model name'
+  Write-Host '  0) Skip pulls for now'
+  $choice = Read-Host '> '
+  $choice = ($choice -replace ',', ' ').Trim()
+  $toPull = [System.Collections.Generic.List[string]]::new()
+
+  if ($choice -match '^[Aa]$') {
+    foreach ($m in $PresetModels) { $null = $toPull.Add($m) }
+  } elseif ($choice -eq '' -or $choice -eq '0') {
+    # skip
+  } elseif ($choice -eq 'c' -or $choice -eq 'C') {
+    $custom = Read-Host 'Model name (e.g. gemma3:4b)'
+    if ($custom.Trim()) { $null = $toPull.Add($custom.Trim()) }
+  } else {
+    foreach ($n in ($choice -split '\s+')) {
+      if ($n -match '^\d+$') {
+        $idx = [int]$n - 1
+        if ($idx -ge 0 -and $idx -lt $PresetModels.Count) {
+          $null = $toPull.Add($PresetModels[$idx])
+        }
+      }
+    }
+  }
+
+  foreach ($m in $toPull) {
+    Write-Host "-> ollama pull $m"
+    $oldEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+      & ollama pull $m
+      if ($LASTEXITCODE -ne 0 -and $null -ne $LASTEXITCODE) {
+        Write-Host "  (failed: $m)" -ForegroundColor Yellow
+      }
+    } catch {
+      Write-Host "  (failed: $m — $($_.Exception.Message))" -ForegroundColor Yellow
+    }
+    $ErrorActionPreference = $oldEap
+  }
+}
+
+Write-Host ''
+Write-Host '  ╔════════════════════════════════════════╗'
+Write-Host '  ║  Setup finished                        ║'
+Write-Host '  ╚════════════════════════════════════════╝'
+Write-Host '  In this folder: edit .env, then:'
+Write-Host '    npm run register -- --main https://SERVER --url https://YOU:PORT --name gpu --token SECRET --models gemma3:4b'
+Write-Host '    npm start'

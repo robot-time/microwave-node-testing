@@ -1,11 +1,47 @@
 #!/usr/bin/env bash
-# Microwave node agent — one-command setup (npm deps + .env).
-# From a full clone: ./setup.sh
-# No git: MICROWAVE_NODE_REPO_RAW=... curl -fsSL .../setup.sh | bash
-#   (installs into ./microwave-node unless MICROWAVE_NODE_DIR is set)
-set -euo pipefail
+# Microwave node agent — installs agent + optional Ollama + model pulls.
+set -uo pipefail
 
-# Install directory: explicit, else folder containing this script, else ./microwave-node (needed for curl|bash).
+DEFAULT_REPO_RAW='https://raw.githubusercontent.com/robot-time/microwave-node-testing/main'
+REPO_RAW="${MICROWAVE_NODE_REPO_RAW:-$DEFAULT_REPO_RAW}"
+REPO_RAW="${REPO_RAW%/}"
+
+# Models offered in the menu (Ollama library names)
+PRESET_MODELS=(
+  gemma3:4b
+  phi3:mini
+  llama3.2:3b
+  llama3.1:8b
+  qwen2.5:7b
+  phi4-mini
+)
+
+banner() {
+  cat << 'BANNER' >&2
+
+  ╔════════════════════════════════════════╗
+  ║   Microwave — node agent setup         ║
+  ╚════════════════════════════════════════╝
+
+BANNER
+}
+
+read_tty() {
+  if [[ -r /dev/tty ]]; then
+    read -r "$@" < /dev/tty
+  else
+    read -r "$@"
+  fi
+}
+
+banner
+
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+  echo "Install Node.js 18+ (includes npm) from https://nodejs.org/ then run this again." >&2
+  exit 1
+fi
+
+# Install directory
 if [[ -n "${MICROWAVE_NODE_DIR:-}" ]]; then
   ROOT="$(mkdir -p "${MICROWAVE_NODE_DIR}" && cd "${MICROWAVE_NODE_DIR}" && pwd)"
 else
@@ -18,28 +54,15 @@ else
   fi
 fi
 cd "${ROOT}"
-echo "→ install dir: ${ROOT}"
-
-# Default upstream (one-liner curl | bash needs no env). Override: MICROWAVE_NODE_REPO_RAW=...
-DEFAULT_REPO_RAW='https://raw.githubusercontent.com/robot-time/microwave-node-testing/main'
-REPO_RAW="${MICROWAVE_NODE_REPO_RAW:-$DEFAULT_REPO_RAW}"
-REPO_RAW="${REPO_RAW%/}"
-
-if [[ ! -f microwave-node.js ]] && [[ -n "$REPO_RAW" ]]; then
-  echo "→ curl microwave-node.js"
-  curl -fsSL "${REPO_RAW%/}/microwave-node.js" -o microwave-node.js
-fi
+echo "→ install dir: ${ROOT}" >&2
 
 if [[ ! -f microwave-node.js ]]; then
-  echo "Missing microwave-node.js." >&2
-  echo "  Clone this repo and run ./setup.sh again, or:" >&2
-  echo "  export MICROWAVE_NODE_REPO_RAW='https://raw.githubusercontent.com/YOU/REPO/main'" >&2
-  echo "  curl -fsSL \"\$MICROWAVE_NODE_REPO_RAW/setup.sh\" | bash" >&2
-  exit 1
+  echo "→ download microwave-node.js" >&2
+  curl -fsSL "${REPO_RAW}/microwave-node.js" -o microwave-node.js || exit $?
 fi
 
 if [[ ! -f package.json ]]; then
-  echo "→ write package.json"
+  echo "→ write package.json" >&2
   cat > package.json << 'PKGEOF'
 {
   "name": "microwave-node",
@@ -59,13 +82,13 @@ if [[ ! -f package.json ]]; then
 PKGEOF
 fi
 
-echo "→ npm install"
-npm install
+echo "→ npm install" >&2
+npm install || exit $?
 
 if [[ ! -f .env ]]; then
   if [[ -f .env.example ]]; then
     cp .env.example .env
-    echo "→ created .env from .env.example"
+    echo "→ created .env from .env.example" >&2
   else
     cat > .env << 'ENVEOF'
 PORT=3847
@@ -74,13 +97,70 @@ NODE_DEVICE_TOKEN=
 OLLAMA_NUM_PREDICT=1024
 OLLAMA_KEEP_ALIVE=30m
 ENVEOF
-    echo "→ created .env (defaults)"
+    echo "→ created .env (defaults)" >&2
   fi
-  echo "  Edit .env — set NODE_DEVICE_TOKEN from the server admin."
 fi
 
-echo ""
-echo "Done."
-echo "  1. Edit .env"
-echo "  2. npm run register -- --main https://SERVER --url https://YOU:3847 --name my-gpu --token SECRET --models gemma3:4b"
-echo "  3. npm start"
+# --- Ollama ---
+echo "" >&2
+if command -v ollama >/dev/null 2>&1; then
+  echo "→ Ollama on PATH: $(ollama --version 2>/dev/null || echo ok)" >&2
+else
+  echo "Ollama not found on PATH." >&2
+  read_tty -r -p "Install Ollama with the official script (https://ollama.com/install.sh)? [y/N] " yn
+  if [[ "${yn:-}" =~ ^[Yy]$ ]]; then
+    curl -fsSL https://ollama.com/install.sh | sh
+    hash -r 2>/dev/null || true
+  fi
+  if ! command -v ollama >/dev/null 2>&1; then
+    echo "→ Ollama still not on PATH — install from https://ollama.com/download , open a new terminal, re-run setup to pull models." >&2
+  else
+    echo "→ Ollama ready: $(ollama --version 2>/dev/null || true)" >&2
+  fi
+fi
+
+# --- Model pulls ---
+if command -v ollama >/dev/null 2>&1; then
+  echo "" >&2
+  echo "Which models should Ollama download? (large files — pick what you need)" >&2
+  i=1
+  for m in "${PRESET_MODELS[@]}"; do
+    echo "  $i) $m" >&2
+    i=$((i + 1))
+  done
+  echo "  a) All of the above" >&2
+  echo "  c) Enter a custom Ollama model name" >&2
+  echo "  0) Skip pulls for now" >&2
+  read_tty -r -p "> " choice
+  choice="${choice//,/ }"
+  to_pull=()
+  if [[ "${choice:-}" =~ ^[Aa]$ ]]; then
+    to_pull=("${PRESET_MODELS[@]}")
+  elif [[ -z "${choice// }" || "$choice" == "0" ]]; then
+    :
+  elif [[ "$choice" == "c" || "$choice" == "C" ]]; then
+    read_tty -r -p "Model name (e.g. gemma3:4b): " custom
+    [[ -n "${custom:-}" ]] && to_pull+=("$custom")
+  else
+    for n in $choice; do
+      if [[ "$n" =~ ^[0-9]+$ ]]; then
+        idx=$((n - 1))
+        if (( idx >= 0 && idx < ${#PRESET_MODELS[@]} )); then
+          to_pull+=("${PRESET_MODELS[$idx]}")
+        fi
+      fi
+    done
+  fi
+  for m in "${to_pull[@]}"; do
+    echo "→ ollama pull $m" >&2
+    ollama pull "$m" || echo "  (failed: $m — check spelling / disk / network)" >&2
+  done
+fi
+
+echo "" >&2
+echo "╔════════════════════════════════════════╗" >&2
+echo "║  Setup finished                        ║" >&2
+echo "╚════════════════════════════════════════╝" >&2
+echo "  In this folder: edit .env, then register and start the agent:" >&2
+echo "    npm run register -- --main https://SERVER --url https://YOU:PORT --name gpu --token SECRET --models gemma3:4b" >&2
+echo "    npm start" >&2
