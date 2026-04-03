@@ -125,12 +125,47 @@ Write-Banner
 $null = Ensure-NodeOnPath
 
 if (-not (Get-CmdPath 'node') -or -not (Get-CmdPath 'npm')) {
-  Write-Host 'Node.js was not found on PATH.' -ForegroundColor Red
-  Write-Host 'Install the LTS build from https://nodejs.org/ then:' -ForegroundColor Yellow
-  Write-Host '  - Close this window, open a NEW PowerShell or Terminal, and run this script again, OR' -ForegroundColor Yellow
-  Write-Host '  - Log out and back in so PATH updates.' -ForegroundColor Yellow
-  Pause-Exit 1
+  Write-Host ''
+  Write-Host '  Node.js is required (it includes npm). It was not found on this PC.' -ForegroundColor Yellow
+  Write-Host ''
+  $wingetNode = Get-CmdPath 'winget'
+  if ($wingetNode) {
+    Write-Host '  Install Node.js LTS now with winget? [Y/n]' -ForegroundColor Cyan
+    try {
+      $yn = Read-Host '  '
+    } catch {
+      $yn = 'y'
+    }
+    if ($yn -eq '' -or $yn -match '^[Yy]') {
+      Write-Host '  -> winget install OpenJS.NodeJS.LTS (may take a minute)...' -ForegroundColor Gray
+      try {
+        $wg = Start-Process -FilePath $wingetNode -ArgumentList @('install', '-e', '--id', 'OpenJS.NodeJS.LTS', '--accept-package-agreements', '--accept-source-agreements') -Wait -PassThru -NoNewWindow
+        if ($wg -and $wg.ExitCode -ne 0) {
+          Write-Host "  winget exited with $($wg.ExitCode). Try manual install below." -ForegroundColor Yellow
+        }
+      } catch {
+        Write-Host "  winget error: $($_.Exception.Message)" -ForegroundColor Yellow
+      }
+      Refresh-PathEnv
+      $null = Ensure-NodeOnPath
+    }
+  }
+
+  if (-not (Get-CmdPath 'node') -or -not (Get-CmdPath 'npm')) {
+    Write-Host ''
+    Write-Host '  Still no Node.js. Do this:' -ForegroundColor Red
+    Write-Host '    1) Open https://nodejs.org/ and install the LTS version (Next, Next, Finish).' -ForegroundColor White
+    Write-Host '    2) Close ALL PowerShell/Terminal windows, open a NEW one, run this setup again.' -ForegroundColor White
+    Write-Host ''
+    Write-Host '  (Node must be on PATH so npm works. A new terminal picks that up after install.)' -ForegroundColor DarkGray
+    Pause-Exit 1
+  }
 }
+
+try {
+  $nv = & node --version 2>$null
+  if ($nv) { Write-Host "-> Node.js OK: $nv" }
+} catch { }
 
 try {
   if ($env:MICROWAVE_NODE_DIR) {
