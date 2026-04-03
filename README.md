@@ -45,24 +45,42 @@ git push -u origin main
 
 ---
 
-## Fastest: clone and setup
+## Setup (pick one)
+
+### No Git — `curl` + `bash` only
+
+Needs **Node.js 18+**, **npm**, **bash**, and **curl** (macOS/Linux: built-in; Windows: use **Git Bash**, **WSL**, or install those tools).
+
+From any directory, one line:
+
+```bash
+MICROWAVE_NODE_REPO_RAW='https://raw.githubusercontent.com/robot-time/microwave-node-testing/main' \
+  curl -fsSL "$MICROWAVE_NODE_REPO_RAW/setup.sh" | bash
+```
+
+That downloads `microwave-node.js`, creates `./microwave-node/` under your **current** folder, runs `npm install`, and writes `.env`.
+
+- **Custom folder:** set `MICROWAVE_NODE_DIR` before the same command, e.g.  
+  `MICROWAVE_NODE_DIR="$HOME/microwave-node" MICROWAVE_NODE_REPO_RAW='https://raw.githubusercontent.com/robot-time/microwave-node-testing/main' curl -fsSL "$MICROWAVE_NODE_REPO_RAW/setup.sh" | bash`
+
+- **No curl:** open  
+  [microwave-node.js (raw)](https://raw.githubusercontent.com/robot-time/microwave-node-testing/main/microwave-node.js)  
+  and [setup.sh (raw)](https://raw.githubusercontent.com/robot-time/microwave-node-testing/main/setup.sh)  
+  in a browser → Save As → put both in the same folder → `chmod +x setup.sh` → `./setup.sh` (with `MICROWAVE_NODE_REPO_RAW` **unset** so it does not re-download).
+
+### With Git
 
 ```bash
 git clone https://github.com/robot-time/microwave-node-testing.git && cd microwave-node-testing && chmod +x setup.sh && ./setup.sh
 ```
 
-(`npm run setup` runs the same script.)
+(`npm run setup` runs `./setup.sh` the same way.)
 
-## Or: curl `setup.sh` only (downloads `microwave-node.js`)
-
-```bash
-export MICROWAVE_NODE_REPO_RAW='https://raw.githubusercontent.com/robot-time/microwave-node-testing/main'
-curl -fsSL "$MICROWAVE_NODE_REPO_RAW/setup.sh" | bash
-```
-
-Raw base (for reference): `https://raw.githubusercontent.com/robot-time/microwave-node-testing/main`
+Raw base (for scripts): `https://raw.githubusercontent.com/robot-time/microwave-node-testing/main`
 
 ## After setup
+
+If you used **curl** into the default path: `cd microwave-node` (or your `MICROWAVE_NODE_DIR`) before the steps below.
 
 1. Edit **`.env`** — `NODE_DEVICE_TOKEN` from the admin.
 2. Register once:

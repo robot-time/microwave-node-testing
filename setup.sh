@@ -1,12 +1,24 @@
 #!/usr/bin/env bash
 # Microwave node agent — one-command setup (npm deps + .env).
 # From a full clone: ./setup.sh
-# Remote install: set MICROWAVE_NODE_REPO_RAW to your GitHub raw base, then:
-#   curl -fsSL https://raw.githubusercontent.com/YOU/REPO/main/setup.sh | bash
+# No git: MICROWAVE_NODE_REPO_RAW=... curl -fsSL .../setup.sh | bash
+#   (installs into ./microwave-node unless MICROWAVE_NODE_DIR is set)
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-.}")" && pwd)"
-cd "$ROOT"
+# Install directory: explicit, else folder containing this script, else ./microwave-node (needed for curl|bash).
+if [[ -n "${MICROWAVE_NODE_DIR:-}" ]]; then
+  ROOT="$(mkdir -p "${MICROWAVE_NODE_DIR}" && cd "${MICROWAVE_NODE_DIR}" && pwd)"
+else
+  _src="${BASH_SOURCE[0]:-}"
+  if [[ -n "${_src}" && "${_src}" != "-" && "${_src}" != "/dev/stdin" && "${_src}" != */fd/* ]]; then
+    ROOT="$(cd "$(dirname "${_src}")" && pwd)"
+  else
+    ROOT="$(pwd)/microwave-node"
+    mkdir -p "${ROOT}"
+  fi
+fi
+cd "${ROOT}"
+echo "→ install dir: ${ROOT}"
 
 REPO_RAW="${MICROWAVE_NODE_REPO_RAW:-}"
 
